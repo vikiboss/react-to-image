@@ -1,6 +1,6 @@
 # React to Image
 
-A Node.js server that use `puppeteer` to take a screenshot of a `React` component and return it, `UnoCSS` is supported out of the box.
+[WIP] A Node.js server leveraging [Puppeteer](https://pptr.dev/) for capturing and returning screenshots of [React](https://react.dev/) components, with seamless [UnoCSS](https://unocss.dev/) integration.
 
 ![screenshot](./docs/demo.png)
 
