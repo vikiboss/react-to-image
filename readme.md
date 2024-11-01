@@ -1,6 +1,6 @@
 # React to Image
 
-A Node.js server that use `puppeteer` to take a screenshot of a `React` component and return it.
+A Node.js server that use `puppeteer` to take a screenshot of a `React` component and return it, `UnoCSS` is supported out of the box.
 
 ![screenshot](./screenshot.png)
 
@@ -22,7 +22,7 @@ Create a screenshot of a React component.
 
 ```json
 {
-  "card": "test",
+  "card": "test-component",
   "props": {
     "name": "hello",
     "list": ["test", "lol"]
