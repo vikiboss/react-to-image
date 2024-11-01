@@ -2,7 +2,7 @@
 
 A Node.js server that use `puppeteer` to take a screenshot of a `React` component and return it, `UnoCSS` is supported out of the box.
 
-![screenshot](./screenshot.png)
+![screenshot](./docs/demo.png)
 
 ## Usage
 
