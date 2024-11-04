@@ -5,6 +5,8 @@
   "main": "./dist/index.js",
   "scripts": {
     "dev": "esno ./src/index.ts",
+    "lint": "biome check",
+    "lint:fix": "biome check --fix",
     "build": "tsup",
     "start": "node ./dist/index.js"
   },
@@ -20,6 +22,7 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@biomejs/biome": "1.9.4",
     "@types/koa": "^2.15.0",
     "@types/koa__router": "^12.0.4",
     "@types/node": "^22.8.7",
