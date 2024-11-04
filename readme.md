@@ -22,7 +22,7 @@ Create a screenshot of a React component.
 
 ```json
 {
-  "card": "test-component",
+  "component": "test-component",
   "props": {
     "name": "hello",
     "list": ["test", "lol"]
@@ -30,7 +30,7 @@ Create a screenshot of a React component.
 }
 ```
 
-You can add more cards by adding more `React Pure Components` in `src/cards`.
+You can add more components by adding more `React Pure Components` in `src/components`.
 
 > TODO: Add more endpoints.
 
