@@ -2,6 +2,7 @@ import * as puppeteer from "puppeteer";
 import { renderToString } from "react-dom/server";
 
 import type * as React from "react";
+import { fromDirname } from "../utils";
 
 interface RenderOptions {
 	width?: number;
@@ -49,9 +50,10 @@ ${
 
 	const launchStart = reactEnd;
 
-	if (!global.browse) {
+	if (!global.browser) {
 		global.browser = await puppeteer.launch({
 			headless: true,
+			userDataDir: fromDirname(import.meta, "./.browser-cache"),
 			args: [
 				"--no-sandbox",
 				"--disable-setuid-sandbox",

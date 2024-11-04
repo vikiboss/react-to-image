@@ -1,31 +1,27 @@
-import fs from "node:fs";
 import React from "react";
 import Router from "@koa/router";
+import * as components from "./components";
 import { renderReactComponentToImage } from "./services/render-react";
-import { fromDirname } from "./utils";
 
 export const router = new Router();
 
-const compPath = fromDirname(import.meta, "./components");
-
-const compNames = fs
-	.readdirSync(compPath, { withFileTypes: true })
-	.filter((dirent) => dirent.isDirectory())
-	.map((dirent) => dirent.name);
-
 router.post("/create", async (ctx) => {
-	const { component, props = {} } = ctx.request.body;
+	const { component: compName, props = {} } = ctx.request.body;
 
-	if (!component || !compNames.includes(component)) {
-		ctx.status = 404;
-		ctx.body = component
-			? `Component \`${component}\` is not found`
-			: "`component` is required";
+	if (!compName) {
+		ctx.status = 401;
+		ctx.body = "`component` is required";
 		return;
 	}
 
-	const module = await import(`./components/${component}/index.tsx`);
-	const Component = module?.default || module;
+	const Component = components[compName];
+
+	if (!Component) {
+		ctx.status = 404;
+		ctx.body = `Component <${compName} /> is not found`;
+		return;
+	}
+
 	const node = React.createElement(Component, props);
 	const imageBuffer = await renderReactComponentToImage(node);
 
