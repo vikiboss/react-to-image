@@ -22,7 +22,7 @@ Create a screenshot of a React component.
 
 ```json
 {
-  "component": "test-component",
+  "component": "TestComponent", // The name of the component, in PascalCase
   "props": {
     "name": "hello",
     "list": ["test", "lol"]
