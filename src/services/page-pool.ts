@@ -21,7 +21,9 @@ export class PagePool {
         '--disable-dev-shm-usage',
         '--no-first-run',
         '--no-zygote',
-        '--single-process',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
       ],
     }
   }
@@ -34,15 +36,40 @@ export class PagePool {
     }
   }
 
+  async #setFocusEmulationEnabled(page: puppeteer.Page) {
+    const session = await page.createCDPSession()
+    await session.send('Emulation.setFocusEmulationEnabled', { enabled: true })
+  }
+
   async initBrowser() {
     this.#browser = await puppeteer.launch(this.#launchOptions)
+    const pages = await this.#browser.pages()
 
-    for (let i = 0; i < this.#minPages; i++) {
+    for (const page of pages) {
+      await this.#setFocusEmulationEnabled(page)
+      this.#pages.push({ page, isBusy: false })
+    }
+
+    while (this.#pages.length < this.#minPages) {
+      console.log('create new page')
       const newPage = await this.#browser.newPage()
+      await this.#setFocusEmulationEnabled(newPage)
       this.#pages.push({ page: newPage, isBusy: false })
     }
 
     return this.#browser
+  }
+
+  async getStatus() {
+    return {
+      pages: this.#pages.length,
+      busyPages: this.#pages.filter((p) => p.isBusy).length,
+      config: {
+        maxPages: this.#maxPages,
+        minPages: this.#minPages,
+        launchOptions: this.#launchOptions,
+      },
+    }
   }
 
   async getPage() {

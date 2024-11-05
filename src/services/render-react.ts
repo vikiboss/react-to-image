@@ -11,9 +11,11 @@ interface RenderOptions {
   deviceScaleFactor?: number
 }
 
-const pagePool = new PagePool()
+export const pagePool = new PagePool()
 
-pagePool.initBrowser()
+pagePool.initBrowser().then(() => {
+  console.log('Browser is ready')
+})
 
 export async function renderReactComponentToImage(Component: React.ReactNode, options: RenderOptions = {}) {
   const { width, height = 800, selector = '#content', unocss = true, deviceScaleFactor } = options
@@ -31,13 +33,15 @@ export async function renderReactComponentToImage(Component: React.ReactNode, op
   <meta charset="UTF-8" />
 ${
   unocss
-    ? `<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@unocss/reset@0.63.4/tailwind.min.css">
-  <script src="https://cdn.jsdelivr.net/npm/@unocss/runtime@0.63.4/uno.global.js"></script>`
+    ? `
+  <link async rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@unocss/reset@0.63.4/tailwind.min.css">
+  <script async src="https://cdn.jsdelivr.net/npm/@unocss/runtime@0.63.4/uno.global.min.js"></script>
+  `
     : ''
 }
 </head>
-  <body>
-    <div id="content">${html}</div>
+  <body style="height: 300px; height: 300px; overflow: hidden;">
+    <div id="content" class="inline-flex">${html}</div>
   </body>
 </html>
   `
@@ -73,13 +77,16 @@ ${
   const screenshotStart = waitEnd
   const wrapperHandler = await page.$(el)
 
+  page.on('console', (msg) => {
+    console.log('>>> ', msg.text())
+  })
+
   const uint8Array = await (wrapperHandler || page).screenshot({
     type: 'png',
     encoding: 'binary',
-    // optimizeForSpeed: true,
   })
 
-  pagePool.releasePage(page)
+  await pagePool.releasePage(page)
 
   const screenshotEnd = performance.now()
   const screenshotTime = round(screenshotEnd - screenshotStart)
