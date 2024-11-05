@@ -1,5 +1,4 @@
-import * as puppeteer from 'puppeteer'
-import { fromDirname } from '../utils/index.js'
+import { PagePool } from './page-pool.js'
 import { renderToString } from 'react-dom/server'
 
 import type * as React from 'react'
@@ -12,9 +11,9 @@ interface RenderOptions {
   deviceScaleFactor?: number
 }
 
-declare global {
-  var browser: puppeteer.Browser | undefined
-}
+const pagePool = new PagePool()
+
+pagePool.initBrowser()
 
 export async function renderReactComponentToImage(Component: React.ReactNode, options: RenderOptions = {}) {
   const { width, height = 800, selector = '#content', unocss = true, deviceScaleFactor } = options
@@ -38,30 +37,14 @@ ${
 }
 </head>
   <body>
-    <div id="content" class="inline-flex">${html}</div>
+    <div id="content">${html}</div>
   </body>
 </html>
   `
 
   const launchStart = reactEnd
+  const page = await pagePool.getPage()
 
-  if (!global.browser) {
-    global.browser = await puppeteer.launch({
-      headless: true,
-      userDataDir: fromDirname(import.meta, './.browser-cache'),
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-gpu',
-        '--disable-dev-shm-usage',
-        '--no-first-run',
-        '--no-zygote',
-        '--single-process',
-      ],
-    })
-  }
-
-  const page = await global.browser.newPage()
   const launchEnd = performance.now()
   const launchTime = round(launchEnd - launchStart)
 
@@ -89,14 +72,17 @@ ${
 
   const screenshotStart = waitEnd
   const wrapperHandler = await page.$(el)
+
   const uint8Array = await (wrapperHandler || page).screenshot({
     type: 'png',
     encoding: 'binary',
-    optimizeForSpeed: true,
+    // optimizeForSpeed: true,
   })
+
+  pagePool.releasePage(page)
+
   const screenshotEnd = performance.now()
   const screenshotTime = round(screenshotEnd - screenshotStart)
-
   const totalTime = round(screenshotEnd - start)
 
   return {
