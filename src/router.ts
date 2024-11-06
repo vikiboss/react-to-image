@@ -1,7 +1,7 @@
 import Router from '@koa/router'
 import React from 'react'
 import * as components from './components/index.js'
-import { pagePool, renderReactComponentToImage } from './services/render-react.js'
+import { browserPool, renderReactComponentToImage } from './services/render-react.js'
 
 export const router = new Router()
 
@@ -55,5 +55,5 @@ router.get('/create', async (ctx) => {
 
 router.get('/status', async (ctx) => {
   ctx.type = 'application/json'
-  ctx.body = await pagePool.getStatus()
+  ctx.body = await browserPool.getStatus()
 })

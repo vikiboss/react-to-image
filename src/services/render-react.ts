@@ -1,7 +1,8 @@
-import { PagePool } from './page-pool.js'
+import { BrowserPool } from './browser-pool.js'
 import { renderToString } from 'react-dom/server'
 
 import type * as React from 'react'
+import type { ConsoleMessage } from 'puppeteer'
 
 interface RenderOptions {
   width?: number
@@ -11,11 +12,7 @@ interface RenderOptions {
   deviceScaleFactor?: number
 }
 
-export const pagePool = new PagePool()
-
-pagePool.initBrowser().then(() => {
-  console.log('Browser is ready')
-})
+export const browserPool = new BrowserPool()
 
 export async function renderReactComponentToImage(Component: React.ReactNode, options: RenderOptions = {}) {
   const { width, height = 800, selector = '#content', unocss = true, deviceScaleFactor } = options
@@ -47,7 +44,13 @@ ${
   `
 
   const launchStart = reactEnd
-  const page = await pagePool.getPage()
+  const page = await browserPool.getPage()
+
+  const listener = async (msg: ConsoleMessage) => {
+    console.log('console from browser >>> ', msg.text())
+  }
+
+  page.on('console', listener)
 
   const launchEnd = performance.now()
   const launchTime = round(launchEnd - launchStart)
@@ -65,7 +68,7 @@ ${
   })
 
   const renderStart = launchEnd
-  await page.setContent(wrapper)
+  await page.setContent(wrapper, { timeout: 6_000 })
   const renderEnd = performance.now()
   const renderTime = round(renderEnd - renderStart)
 
@@ -77,16 +80,12 @@ ${
   const screenshotStart = waitEnd
   const wrapperHandler = await page.$(el)
 
-  page.on('console', (msg) => {
-    console.log('>>> ', msg.text())
-  })
-
   const uint8Array = await (wrapperHandler || page).screenshot({
     type: 'png',
     encoding: 'binary',
   })
 
-  await pagePool.releasePage(page)
+  page.off('console', listener)
 
   const screenshotEnd = performance.now()
   const screenshotTime = round(screenshotEnd - screenshotStart)
