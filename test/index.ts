@@ -16,6 +16,7 @@ const request = (idx: number) =>
     .then(async (buffer) => {
       await fs.mkdir('./images', { recursive: true })
       await fs.writeFile(`./images/${idx}.png`, Buffer.from(buffer))
+      console.log(`请求 ${idx} 执行完毕`)
     })
 
 console.log('开始并发执行 100 次浏览器渲染请求并写入磁盘...')

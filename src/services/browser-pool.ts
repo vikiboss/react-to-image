@@ -1,19 +1,40 @@
-import * as puppeteer from 'puppeteer'
+import fs from 'node:fs'
+import url from 'node:url'
+import path from 'node:path'
+import puppeteer from 'puppeteer'
+
+const __dirname = url.fileURLToPath(new URL('.', import.meta.url))
 
 interface BrowserPoolOptions {
   maxWsEndpoints?: number
   maxPageOpenTimes?: number
   launchOptions?: puppeteer.PuppeteerLaunchOptions
   immediateLaunch?: boolean
+  // rootUserDir?: string
   onReady?: (bp: BrowserPool) => void
+}
+
+interface BrowserWsEndpointItem {
+  id: string
+  isBusy: boolean
+  wsEndpoint: string
+  pageOpenTimes: number
+  updateTimer: NodeJS.Timeout | null
 }
 
 export class BrowserPool {
   static _instance: BrowserPool | null = null
 
-  #maxWsEndpoints = 10
+  #maxWsEndpoints = 6
   #maxPageOpenTimes = 1_000
+  // #rootUserDir = '.browser-cache'
+
+  #launchReady = false
+  #waitingQueue: string[] = []
+  #wsEndpointMap = new Map<string, BrowserWsEndpointItem>()
+
   #onReady: (bp: BrowserPool) => void = () => {}
+
   #launchOptions: puppeteer.PuppeteerLaunchOptions = {
     headless: true,
     args: [
@@ -28,22 +49,11 @@ export class BrowserPool {
     ],
   }
 
-  // browser id -> ws endpoint / page open times / update timer
-  #wsEndpointMap = new Map<
-    string,
-    {
-      id: string
-      isBusy: boolean
-      wsEndpoint: string
-      pageOpenTimes: number
-      updateTimer: NodeJS.Timeout | null
-    }
-  >()
-
   constructor(options?: BrowserPoolOptions) {
     this.#maxWsEndpoints = options?.maxWsEndpoints ?? this.#maxWsEndpoints
     this.#maxPageOpenTimes = options?.maxPageOpenTimes ?? this.#maxPageOpenTimes
     this.#launchOptions = options?.launchOptions ?? this.#launchOptions
+    // this.#rootUserDir = options?.rootUserDir ?? this.#rootUserDir
     this.#onReady = options?.onReady ?? this.#onReady
     const immediateLaunch = options?.immediateLaunch ?? true
     immediateLaunch && this.initBrowser()
@@ -60,7 +70,10 @@ export class BrowserPool {
   }
 
   async #createBrowser(id = uuid()) {
-    const browser = await puppeteer.launch(this.#launchOptions)
+    const browser = await puppeteer.launch({
+      ...this.#launchOptions,
+      // userDataDir: path.join(__dirname, this.#rootUserDir, id),
+    })
     const endpoint = browser.wsEndpoint()
     const target = this.#wsEndpointMap.get(id)
 
@@ -108,10 +121,11 @@ export class BrowserPool {
     for (let i = 0; i < this.#maxWsEndpoints; i++) {
       await this.#createBrowser()
     }
+    this.#launchReady = true
     this.#onReady(this)
   }
 
-  getAvailableBrowser() {
+  getAvailableTarget() {
     return randItem([...this.#wsEndpointMap.values()].filter((t) => !t.isBusy))
   }
 
@@ -125,16 +139,20 @@ export class BrowserPool {
     if (target) target.isBusy = false
   }
 
-  async getBrowser(target = this.getAvailableBrowser()) {
+  async getBrowser(target = this.getAvailableTarget()) {
     if (!target) {
+      const queueId = uuid()
+      this.#waitingQueue.push(queueId)
       return new Promise<puppeteer.Browser>((resolve) => {
         const timer = setInterval(() => {
-          const target = this.getAvailableBrowser()
-          if (target) {
+          const target = this.getAvailableTarget()
+          const isMyTurn = this.#waitingQueue.at(0) === queueId
+          if (target && isMyTurn) {
             clearInterval(timer)
+            this.#waitingQueue.shift()
             resolve(this.getBrowser(target))
           }
-        }, 300)
+        }, 100)
       })
     }
 
@@ -195,22 +213,31 @@ export class BrowserPool {
   }
 
   async getStatus() {
-    const browser = await this.getBrowser()
+    const wsEndpoints = Array.from(this.#wsEndpointMap.values())
+    const availableWsEndpoints = wsEndpoints.filter((t) => !t.isBusy).length
 
     return {
+      status: {
+        launchReady: this.#launchReady,
+        isBusy: this.#waitingQueue.length > 0,
+        availableWsEndpoints: availableWsEndpoints,
+        queueCount: this.#waitingQueue.length,
+        queue: this.#waitingQueue,
+      },
       config: {
         maxWsEndpoints: this.#maxWsEndpoints,
         maxPageOpenTimes: this.#maxPageOpenTimes,
         launchOptions: this.#launchOptions,
       },
-      wsEndpoints: Array.from(this.#wsEndpointMap.values()),
-      uptime: process.uptime(),
-      timestamp: Date.now(),
-      versions: {
+      version: {
         node: process.version,
         v8: process.versions.v8,
-        browser: await browser.version(),
       },
+      time: {
+        uptime: process.uptime(),
+        timestamp: Date.now(),
+      },
+      wsEndpoints: wsEndpoints,
     }
   }
 }
