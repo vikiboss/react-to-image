@@ -12,7 +12,11 @@ interface RenderOptions {
   deviceScaleFactor?: number
 }
 
-export const browserPool = new BrowserPool()
+export const browserPool = new BrowserPool({
+  onReady: (bp) => {
+    console.log('BrowserPool is ready')
+  },
+})
 
 export async function renderReactComponentToImage(Component: React.ReactNode, options: RenderOptions = {}) {
   const { width, height = 800, selector = '#content', unocss = true, deviceScaleFactor } = options
@@ -44,7 +48,9 @@ ${
   `
 
   const launchStart = reactEnd
-  const page = await browserPool.getPage()
+
+  const browser = await browserPool.getBrowser()
+  const page = await browser.newPage()
 
   const listener = async (msg: ConsoleMessage) => {
     console.log('console from browser >>> ', msg.text())
@@ -85,7 +91,8 @@ ${
     encoding: 'binary',
   })
 
-  page.off('console', listener)
+  await page.close()
+  await browserPool.releaseBrowser(browser)
 
   const screenshotEnd = performance.now()
   const screenshotTime = round(screenshotEnd - screenshotStart)

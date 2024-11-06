@@ -11,8 +11,8 @@ interface BrowserPoolOptions {
 export class BrowserPool {
   static _instance: BrowserPool | null = null
 
-  #maxWsEndpoints = 4
-  #maxPageOpenTimes = 1000
+  #maxWsEndpoints = 10
+  #maxPageOpenTimes = 1_000
   #onReady: (bp: BrowserPool) => void = () => {}
   #launchOptions: puppeteer.PuppeteerLaunchOptions = {
     headless: true,
@@ -33,6 +33,7 @@ export class BrowserPool {
     string,
     {
       id: string
+      isBusy: boolean
       wsEndpoint: string
       pageOpenTimes: number
       updateTimer: NodeJS.Timeout | null
@@ -40,22 +41,22 @@ export class BrowserPool {
   >()
 
   constructor(options?: BrowserPoolOptions) {
-    this.#maxWsEndpoints = options?.maxWsEndpoints ?? 4
-    this.#maxPageOpenTimes = options?.maxPageOpenTimes ?? 1000
+    this.#maxWsEndpoints = options?.maxWsEndpoints ?? this.#maxWsEndpoints
+    this.#maxPageOpenTimes = options?.maxPageOpenTimes ?? this.#maxPageOpenTimes
     this.#launchOptions = options?.launchOptions ?? this.#launchOptions
     this.#onReady = options?.onReady ?? this.#onReady
     const immediateLaunch = options?.immediateLaunch ?? true
     immediateLaunch && this.initBrowser()
   }
 
-  async #enableFocusEmulation(page: puppeteer.Page) {
-    const session = await page.createCDPSession()
-    await session.send('Emulation.setFocusEmulationEnabled', { enabled: true })
-  }
-
   static getInstance(options?: BrowserPoolOptions) {
     if (!BrowserPool._instance) BrowserPool._instance = new BrowserPool(options)
     return BrowserPool._instance
+  }
+
+  async isBrowserBusy(id: string) {
+    const target = this.#wsEndpointMap.get(id)
+    return target ? target.isBusy : false
   }
 
   async #createBrowser(id = uuid()) {
@@ -64,11 +65,13 @@ export class BrowserPool {
     const target = this.#wsEndpointMap.get(id)
 
     if (target) {
+      target.isBusy = false
       target.wsEndpoint = endpoint
       target.pageOpenTimes = 1 // first blank page
     } else {
       this.#wsEndpointMap.set(id, {
         id,
+        isBusy: false,
         wsEndpoint: endpoint,
         pageOpenTimes: 1, // first blank page
         updateTimer: null,
@@ -98,9 +101,7 @@ export class BrowserPool {
 
     browser.close()
 
-    const newBrowser = await this.#createBrowser(id)
-
-    return newBrowser
+    return await this.#createBrowser(id)
   }
 
   async initBrowser() {
@@ -110,13 +111,41 @@ export class BrowserPool {
     this.#onReady(this)
   }
 
-  async getBrowser() {
-    const target = randItem([...this.#wsEndpointMap.values()])
+  getAvailableBrowser() {
+    return randItem([...this.#wsEndpointMap.values()].filter((t) => !t.isBusy))
+  }
+
+  getTargetByBrowser(browser: puppeteer.Browser) {
+    return [...this.#wsEndpointMap.values()].find((t) => t.wsEndpoint === browser.wsEndpoint())
+  }
+
+  async releaseBrowser(browser: puppeteer.Browser) {
+    await browser.disconnect()
+    const target = this.getTargetByBrowser(browser)
+    if (target) target.isBusy = false
+  }
+
+  async getBrowser(target = this.getAvailableBrowser()) {
+    if (!target) {
+      return new Promise<puppeteer.Browser>((resolve) => {
+        const timer = setInterval(() => {
+          const target = this.getAvailableBrowser()
+          if (target) {
+            clearInterval(timer)
+            resolve(this.getBrowser(target))
+          }
+        }, 300)
+      })
+    }
 
     let browser: puppeteer.Browser
 
     try {
-      browser = await puppeteer.connect({ browserWSEndpoint: target.wsEndpoint })
+      target.isBusy = true
+
+      browser = await puppeteer.connect({
+        browserWSEndpoint: target.wsEndpoint,
+      })
 
       if (target.pageOpenTimes > this.#maxPageOpenTimes) {
         browser = await this.#updateBrowser(browser, target.id)
@@ -133,9 +162,10 @@ export class BrowserPool {
   async useBrowser(callback: (browser: puppeteer.Browser) => Promise<void>) {
     const browser = await this.getBrowser()
     await callback(browser)
+    this.releaseBrowser(browser)
   }
 
-  async #waitRender(page: puppeteer.Page, timeout = 30_000) {
+  async waitRender(page: puppeteer.Page, timeout = 30_000) {
     const renderDoneHandle = await page.waitForFunction('window._renderDone', {
       polling: 120,
       timeout: timeout,
@@ -153,7 +183,6 @@ export class BrowserPool {
   async getPage() {
     const browser = await this.getBrowser()
     const page = await browser.newPage()
-    await this.#enableFocusEmulation(page)
     return page
   }
 
@@ -181,12 +210,9 @@ export class BrowserPool {
         node: process.version,
         v8: process.versions.v8,
         browser: await browser.version(),
-        puppeteer: require('puppeteer/package.json').version,
       },
     }
   }
-
-  async closeBrowser() {}
 }
 
 function uuid(length = 8) {
