@@ -1,16 +1,10 @@
-import fs from 'node:fs'
-import url from 'node:url'
-import path from 'node:path'
-import puppeteer from 'puppeteer'
-
-const __dirname = url.fileURLToPath(new URL('.', import.meta.url))
+import * as puppeteer from 'puppeteer'
 
 interface BrowserPoolOptions {
   maxWsEndpoints?: number
   maxPageOpenTimes?: number
   launchOptions?: puppeteer.PuppeteerLaunchOptions
   immediateLaunch?: boolean
-  // rootUserDir?: string
   onReady?: (bp: BrowserPool) => void
 }
 
@@ -27,7 +21,6 @@ export class BrowserPool {
 
   #maxWsEndpoints = 6
   #maxPageOpenTimes = 1_000
-  // #rootUserDir = '.browser-cache'
 
   #launchReady = false
   #waitingQueue: string[] = []
@@ -53,7 +46,6 @@ export class BrowserPool {
     this.#maxWsEndpoints = options?.maxWsEndpoints ?? this.#maxWsEndpoints
     this.#maxPageOpenTimes = options?.maxPageOpenTimes ?? this.#maxPageOpenTimes
     this.#launchOptions = options?.launchOptions ?? this.#launchOptions
-    // this.#rootUserDir = options?.rootUserDir ?? this.#rootUserDir
     this.#onReady = options?.onReady ?? this.#onReady
     const immediateLaunch = options?.immediateLaunch ?? true
     immediateLaunch && this.initBrowser()
@@ -72,7 +64,6 @@ export class BrowserPool {
   async #createBrowser(id = uuid()) {
     const browser = await puppeteer.launch({
       ...this.#launchOptions,
-      // userDataDir: path.join(__dirname, this.#rootUserDir, id),
     })
     const endpoint = browser.wsEndpoint()
     const target = this.#wsEndpointMap.get(id)
