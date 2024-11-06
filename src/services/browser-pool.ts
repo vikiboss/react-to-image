@@ -1,10 +1,17 @@
+import fs from 'node:fs'
+import url from 'node:url'
+import path from 'node:path'
 import * as puppeteer from 'puppeteer'
+import exitHook from 'exit-hook'
+
+const __dirname = url.fileURLToPath(new URL('.', import.meta.url))
 
 interface BrowserPoolOptions {
   maxWsEndpoints?: number
   maxPageOpenTimes?: number
   launchOptions?: puppeteer.PuppeteerLaunchOptions
   immediateLaunch?: boolean
+  enableCache?: boolean
   onReady?: (bp: BrowserPool) => void
 }
 
@@ -19,8 +26,10 @@ interface BrowserWsEndpointItem {
 export class BrowserPool {
   static _instance: BrowserPool | null = null
 
+  #cacheDir = path.join(__dirname, '.browser-data')
   #maxWsEndpoints = 6
   #maxPageOpenTimes = 1_000
+  #enableCache = true
 
   #launchReady = false
   #waitingQueue: string[] = []
@@ -46,9 +55,20 @@ export class BrowserPool {
     this.#maxWsEndpoints = options?.maxWsEndpoints ?? this.#maxWsEndpoints
     this.#maxPageOpenTimes = options?.maxPageOpenTimes ?? this.#maxPageOpenTimes
     this.#launchOptions = options?.launchOptions ?? this.#launchOptions
+    this.#enableCache = options?.enableCache ?? this.#enableCache
     this.#onReady = options?.onReady ?? this.#onReady
     const immediateLaunch = options?.immediateLaunch ?? true
     immediateLaunch && this.initBrowser()
+
+    exitHook(async () => {
+      for (const target of this.#wsEndpointMap.values()) {
+        target.updateTimer && clearTimeout(target.updateTimer)
+        if (target.wsEndpoint) {
+          const browser = await puppeteer.connect({ browserWSEndpoint: target.wsEndpoint })
+          await browser.close()
+        }
+      }
+    })
   }
 
   static getInstance(options?: BrowserPoolOptions) {
@@ -64,6 +84,7 @@ export class BrowserPool {
   async #createBrowser(id = uuid()) {
     const browser = await puppeteer.launch({
       ...this.#launchOptions,
+      userDataDir: this.#enableCache ? path.join(this.#cacheDir, id) : undefined,
     })
     const endpoint = browser.wsEndpoint()
     const target = this.#wsEndpointMap.get(id)
@@ -109,9 +130,22 @@ export class BrowserPool {
   }
 
   async initBrowser() {
-    for (let i = 0; i < this.#maxWsEndpoints; i++) {
-      await this.#createBrowser()
+    const ids: string[] = []
+
+    if (this.#enableCache && fs.existsSync(this.#cacheDir)) {
+      const files = fs.readdirSync(this.#cacheDir)
+      for (const file of files) {
+        fs.unlinkSync(path.join(this.#cacheDir, file, 'SingletonLock'))
+        ids.push(file)
+      }
+    } else {
+      ids.push(...Array.from({ length: this.#maxWsEndpoints }, () => uuid()))
     }
+
+    for (const id of ids) {
+      await this.#createBrowser(id)
+    }
+
     this.#launchReady = true
     this.#onReady(this)
   }
