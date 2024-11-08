@@ -57,8 +57,6 @@ export class BrowserPool {
     this.#launchOptions = options?.launchOptions ?? this.#launchOptions
     this.#enableCache = options?.enableCache ?? this.#enableCache
     this.#onReady = options?.onReady ?? this.#onReady
-    const immediateLaunch = options?.immediateLaunch ?? true
-    immediateLaunch && this.initBrowser()
 
     exitHook(async () => {
       for (const target of this.#wsEndpointMap.values()) {
@@ -69,6 +67,9 @@ export class BrowserPool {
         }
       }
     })
+
+    const immediateLaunch = options?.immediateLaunch ?? true
+    immediateLaunch && this.initBrowser()
   }
 
   static getInstance(options?: BrowserPoolOptions) {
@@ -133,10 +134,11 @@ export class BrowserPool {
     const ids: string[] = []
 
     if (this.#enableCache && fs.existsSync(this.#cacheDir)) {
-      const files = fs.readdirSync(this.#cacheDir)
-      for (const file of files) {
-        fs.unlinkSync(path.join(this.#cacheDir, file, 'SingletonLock'))
-        ids.push(file)
+      const folderIds = fs.readdirSync(this.#cacheDir).slice(0, this.#maxWsEndpoints)
+      for (const id of folderIds) {
+        const lockFile = path.join(this.#cacheDir, id, 'SingletonLock')
+        if (fs.existsSync(lockFile)) fs.unlinkSync(lockFile)
+        ids.push(id)
       }
     } else {
       ids.push(...Array.from({ length: this.#maxWsEndpoints }, () => uuid()))

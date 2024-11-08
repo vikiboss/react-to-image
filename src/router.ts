@@ -1,9 +1,11 @@
 import Router from '@koa/router'
-import React from 'react'
 import * as components from './components/index.js'
-import { browserPool, renderReactComponentToImage } from './services/render-react.js'
+import { ReactRenderer } from './services/react-renderer.js'
+import { BrowserPool } from './services/browser-pool.js'
+import type * as React from 'react'
 
 export const router = new Router()
+const reactRenderer = new ReactRenderer()
 
 router.post('/create', async (ctx) => {
   const { component: compName, props = {} } = ctx.request.body
@@ -14,7 +16,7 @@ router.post('/create', async (ctx) => {
     return
   }
 
-  const Component = components[compName as never] as React.ComponentType<any> | undefined
+  const Component = components[compName as never] as React.FunctionComponent | undefined
 
   if (!Component) {
     ctx.status = 404
@@ -22,32 +24,7 @@ router.post('/create', async (ctx) => {
     return
   }
 
-  const node = React.createElement(Component, props)
-  const imageBuffer = await renderReactComponentToImage(node)
-
-  ctx.type = 'image/png'
-  ctx.body = imageBuffer.buffer
-})
-
-router.get('/create', async (ctx) => {
-  const { component: compName, props = '{}' } = ctx.request.query
-
-  if (!compName) {
-    ctx.status = 401
-    ctx.body = '`component` is required'
-    return
-  }
-
-  const Component = components[compName as never] as React.ComponentType<any> | undefined
-
-  if (!Component) {
-    ctx.status = 404
-    ctx.body = `Component <${compName} /> is not found`
-    return
-  }
-
-  const node = React.createElement(Component, JSON.parse(props as string))
-  const imageBuffer = await renderReactComponentToImage(node)
+  const imageBuffer = await reactRenderer.render(Component, props)
 
   ctx.type = 'image/png'
   ctx.body = imageBuffer.buffer
@@ -55,5 +32,5 @@ router.get('/create', async (ctx) => {
 
 router.get('/status', async (ctx) => {
   ctx.type = 'application/json'
-  ctx.body = await browserPool.getStatus()
+  ctx.body = await BrowserPool.getInstance().getStatus()
 })
